@@ -1076,12 +1076,13 @@ void ARMAsmPrinter::EmitUnwindingInstruction(const MachineInstr *MI) {
   unsigned Opc = MI->getOpcode();
   unsigned SrcReg, DstReg;
 
-  if (Opc == ARM::tPUSH || Opc == ARM::tLDRpci) {
-    // Two special cases:
+  if (Opc == ARM::tPUSH || Opc == ARM::tLDRpci || Opc == ARM::t2LDRpci || Opc == ARM::t2ADR) {
+    // Three special cases:
     // 1) tPUSH does not have src/dst regs.
     // 2) for Thumb1 code we sometimes materialize the constant via constpool
     // load. Yes, this is pretty fragile, but for now I don't see better
     // way... :(
+    // 3) shadow push code
     SrcReg = DstReg = ARM::SP;
   } else {
     SrcReg = MI->getOperand(1).getReg();
@@ -1205,6 +1206,10 @@ void ARMAsmPrinter::EmitUnwindingInstruction(const MachineInstr *MI) {
         Offset = -cast<ConstantInt>(CPE.Val.ConstVal)->getSExtValue();
         break;
       }
+      case ARM::t2LDRpci:
+      case ARM::t2ADR:
+        // Ignore shadow push stuff
+        return;
       }
 
       if (MAI->getExceptionHandlingType() == ExceptionHandling::ARM) {

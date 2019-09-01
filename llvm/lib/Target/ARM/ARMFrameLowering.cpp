@@ -160,6 +160,14 @@ static bool isCSRestore(MachineInstr &MI, const ARMBaseInstrInfo &TII,
       MI.getOperand(1).getReg() == ARM::SP)
     return true;
 
+  // Move past shadow return code.
+  // TODO: Check false positives
+  if ((MI.getOpcode() == ARM::t2LDRpci) ||
+      (MI.getOpcode() == ARM::tMOVr && MI.getOperand(0).getReg() == ARM::R8 &&
+       MI.getOperand(1).getReg() == ARM::R8) ||
+      (MI.getOpcode() == ARM::t2ADR && MI.getOperand(0).getReg() == ARM::R12))
+    return true;
+
   return false;
 }
 
@@ -446,6 +454,13 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
       if (Reg < ARM::D8 || Reg >= ARM::D8 + AFI->getNumAlignedDPRCS2Regs())
         DPRCSSize += 8;
     }
+  }
+
+  // Move past the shadow push operation emitted by `spillCalleeSavedRegisters`.
+  while (MBBI != MBB.end() && (MBBI->getOpcode() == ARM::t2LDRpci ||
+                               MBBI->getOpcode() == ARM::t2ADR||
+                               MBBI->getOpcode() == ARM::tMOVr)) {
+    ++MBBI;
   }
 
   // Move past area 1.
@@ -1087,7 +1102,9 @@ void ARMFrameLowering::emitPopInst(MachineBasicBlock &MBB,
 
       if (Reg == ARM::LR && !isTailCall && !isVarArg && !isInterrupt &&
           !isTrap && STI.hasV5TOps()) {
-        if (MBB.succ_empty()) {
+        bool shouldInsertShadowPop = MF.getFunction().hasFnAttribute(Attribute::ShadowCallStack);
+
+        if (MBB.succ_empty() && !shouldInsertShadowPop) {
           Reg = ARM::PC;
           // Fold the return instruction into the LDM.
           DeleteRet = true;
@@ -1431,6 +1448,38 @@ bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
 
   MachineFunction &MF = *MBB.getParent();
   ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+
+  if (needsShadowCallStackProlog(MF, CSI)) {
+    DebugLoc DL;
+
+    // add ip, pc, #6
+    BuildMI(MBB, MI, DL, TII.get(ARM::t2ADR), ARM::R12)
+        .addImm(6)
+        .add(predOps(ARMCC::AL))
+        .setMIFlags(MachineInstr::FrameSetup);
+
+    unsigned PCLabelId = AFI->createPICLabelUId();
+    ARMConstantPoolValue *NewCPV = ARMConstantPoolSymbol::Create(
+        MF.getFunction().getContext(), "__TCPrivateShadowPush", PCLabelId, 0);
+    MachineConstantPool *MCP = MF.getConstantPool();
+    unsigned CPI = MCP->getConstantPoolIndex(NewCPV, 4);
+
+    // (ip = continuation address)
+    // ldr pc, [pc, offset(__TCPrivateShadowPush)]
+    BuildMI(MBB, MI, DL, TII.get(ARM::t2LDRpci), ARM::PC)
+        .addConstantPoolIndex(CPI)
+        .add(predOps(ARMCC::AL))
+        .setMIFlags(MachineInstr::FrameSetup);
+
+    // NOP sled for `add ip, pc, _` (which aligns pc to 4-byte boundaries before calculation)
+    // TODO: Get rid of this unspeakable hack
+    // TODO: Actually, this hack is unreliable because other passes may move this around.
+    BuildMI(MBB, MI, DL, TII.get(ARM::tMOVr), ARM::R8)
+        .addReg(ARM::R8)
+        .add(predOps(ARMCC::AL));
+
+  }
 
   unsigned PushOpc = AFI->isThumbFunction() ? ARM::t2STMDB_UPD : ARM::STMDB_UPD;
   unsigned PushOneOpc = AFI->isThumbFunction() ?
@@ -1462,6 +1511,7 @@ bool ARMFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
 
   MachineFunction &MF = *MBB.getParent();
   ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   bool isVarArg = AFI->getArgRegsSaveSize() > 0;
   unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
 
@@ -1480,7 +1530,84 @@ bool ARMFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
   emitPopInst(MBB, MI, CSI, PopOpc, LdrOpc, isVarArg, false,
               &isARMArea1Register, 0);
 
+  if (needsShadowCallStackProlog(MF, CSI)) {
+    DebugLoc DL;
+    bool isTailCall = false;
+    if (MBB.end() != MI) {
+      DL = MI->getDebugLoc();
+      unsigned RetOpcode = MI->getOpcode();
+      isTailCall = RetOpcode == ARM::TCRETURNdi ||
+                   RetOpcode == ARM::TCRETURNri || RetOpcode == ARM::tBcc ||
+                   RetOpcode == ARM::t2Bcc;
+      // TODO: handle `ARM::t2SUBS_PC_LR`
+      if (!isTailCall) {
+        assert((RetOpcode == ARM::BX_RET || RetOpcode == ARM::tBX_RET) &&
+               "expecting BX LR");
+      }
+    }
+
+    if (isTailCall) {
+      // add ip, pc, #6
+      BuildMI(MBB, MI, DL, TII.get(ARM::t2ADR), ARM::R12)
+          .addImm(6)
+          .add(predOps(ARMCC::AL))
+          .setMIFlags(MachineInstr::FrameSetup);
+
+      unsigned PCLabelId = AFI->createPICLabelUId();
+      ARMConstantPoolValue *NewCPV = ARMConstantPoolSymbol::Create(
+          MF.getFunction().getContext(), "__TCPrivateShadowAssert", PCLabelId, 0);
+      MachineConstantPool *MCP = MF.getConstantPool();
+      unsigned CPI = MCP->getConstantPoolIndex(NewCPV, 4);
+
+      // ldr pc, [pc, offset(__TCPrivateShadowAssert)]
+      BuildMI(MBB, MI, DL, TII.get(ARM::t2LDRpci), ARM::PC)
+          .addConstantPoolIndex(CPI)
+          .add(predOps(ARMCC::AL));
+
+      // NOP sled for `add ip, pc, _` (which aligns pc to 4-byte boundaries before calculation)
+      // TODO: Get rid of this unspeakable hack
+      // TODO: Actually, this hack is unreliable because other passes may move this around.
+      BuildMI(MBB, MI, DL, TII.get(ARM::tMOVr), ARM::R8)
+          .addReg(ARM::R8)
+          .add(predOps(ARMCC::AL));
+
+      // (`__TCPrivateShadowAssert` returns to `ip`.)
+    } else {
+      unsigned PCLabelId = AFI->createPICLabelUId();
+      ARMConstantPoolValue *NewCPV = ARMConstantPoolSymbol::Create(
+          MF.getFunction().getContext(), "__TCPrivateShadowAssertReturn", PCLabelId, 0);
+      MachineConstantPool *MCP = MF.getConstantPool();
+      unsigned CPI = MCP->getConstantPoolIndex(NewCPV, 4);
+
+      // ldr pc, [pc, offset(__TCPrivateShadowAssertReturn)]
+      BuildMI(MBB, MI, DL, TII.get(ARM::t2LDRpci), ARM::PC)
+          .addConstantPoolIndex(CPI)
+          .add(predOps(ARMCC::AL));
+
+      // (`__TCPrivateShadowAssertReturn` automatically jumps to `lr` after
+      // validation.)
+      // TODO: Delete `bx lr`?
+    }
+  }
+
   return true;
+}
+
+bool ARMFrameLowering::needsShadowCallStackProlog(
+    MachineFunction &MF, const std::vector<CalleeSavedInfo> &CSI) const {
+  if (CSI.empty())
+    return false;
+
+  if (!MF.getFunction().hasFnAttribute(Attribute::ShadowCallStack))
+    return false;
+
+  for (const CalleeSavedInfo &Reg : CSI) {
+    if (Reg.getReg() == ARM::LR) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // FIXME: Make generic?
@@ -2023,7 +2150,11 @@ void ARMFrameLowering::determineCalleeSaves(MachineFunction &MF,
 
     // Avoid spilling LR in Thumb1 if there's a tail call: it's expensive to
     // restore LR in that case.
-    bool ExpensiveLRRestore = AFI->isThumb1OnlyFunction() && MFI.hasTailCall();
+    // When shadow call stack is enabled, LR has to be validated when restored
+    // from the stack. Thus we set this flag in this case as well.
+    bool ExpensiveLRRestore =
+        (AFI->isThumb1OnlyFunction() && MFI.hasTailCall()) ||
+        MF.getFunction().hasFnAttribute(Attribute::ShadowCallStack);
 
     // If LR is not spilled, but at least one of R4, R5, R6, and R7 is spilled.
     // Spill LR as well so we can fold BX_RET to the registers restore (LDM).

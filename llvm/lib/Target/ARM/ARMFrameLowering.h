@@ -72,6 +72,9 @@ public:
   }
 
 private:
+  bool
+  needsShadowCallStackProlog(MachineFunction &MF,
+                             const std::vector<CalleeSavedInfo> &CSI) const;
   void emitPushInst(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
                     const std::vector<CalleeSavedInfo> &CSI, unsigned StmOpc,
                     unsigned StrOpc, bool NoGap,
