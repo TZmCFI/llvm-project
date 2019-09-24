@@ -161,11 +161,8 @@ static bool isCSRestore(MachineInstr &MI, const ARMBaseInstrInfo &TII,
     return true;
 
   // Move past shadow return code.
-  // TODO: Check false positives
-  if ((MI.getOpcode() == ARM::t2LDRpci) ||
-      (MI.getOpcode() == ARM::tMOVr && MI.getOperand(0).getReg() == ARM::R8 &&
-       MI.getOperand(1).getReg() == ARM::R8) ||
-      (MI.getOpcode() == ARM::t2ADR && MI.getOperand(0).getReg() == ARM::R12))
+  if (MI.getOpcode() == ARM::SHADOW_STACK_ASSERT ||
+      MI.getOpcode() == ARM::SHADOW_STACK_ASSERT_RETURN)
     return true;
 
   return false;
@@ -457,9 +454,7 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
   }
 
   // Move past the shadow push operation emitted by `spillCalleeSavedRegisters`.
-  while (MBBI != MBB.end() && (MBBI->getOpcode() == ARM::t2LDRpci ||
-                               MBBI->getOpcode() == ARM::t2ADR||
-                               MBBI->getOpcode() == ARM::tMOVr)) {
+  while (MBBI != MBB.end() && MBBI->getOpcode() == ARM::SHADOW_STACK_PUSH) {
     ++MBBI;
   }
 
@@ -1453,33 +1448,8 @@ bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
   if (needsShadowCallStackProlog(MF, CSI)) {
     DebugLoc DL;
 
-    // add ip, pc, #6
-    BuildMI(MBB, MI, DL, TII.get(ARM::t2ADR), ARM::R12)
-        .addImm(6)
-        .add(predOps(ARMCC::AL))
+    BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_PUSH))
         .setMIFlags(MachineInstr::FrameSetup);
-
-    unsigned PCLabelId = AFI->createPICLabelUId();
-    ARMConstantPoolValue *NewCPV = ARMConstantPoolSymbol::Create(
-        MF.getFunction().getContext(), "__TCPrivateShadowPush", PCLabelId, 0);
-    MachineConstantPool *MCP = MF.getConstantPool();
-    unsigned CPI = MCP->getConstantPoolIndex(NewCPV, 4);
-
-    // (ip = continuation address)
-    // ldr pc, [pc, offset(__TCPrivateShadowPush)]
-    BuildMI(MBB, MI, DL, TII.get(ARM::t2LDRpci), ARM::PC)
-        .addConstantPoolIndex(CPI)
-        .add(predOps(ARMCC::AL))
-        .setMIFlags(MachineInstr::FrameSetup);
-
-    // NOP sled for `add ip, pc, _` (which aligns pc to 4-byte boundaries before calculation)
-    // TODO: Get rid of this unspeakable hack
-    // TODO: Actually, this hack is unreliable because other passes may move this around.
-    BuildMI(MBB, MI, DL, TII.get(ARM::tMOVr), ARM::R8)
-        .addReg(ARM::R8)
-        .add(predOps(ARMCC::AL))
-        .setMIFlags(MachineInstr::FrameSetup);
-
   }
 
   unsigned PushOpc = AFI->isThumbFunction() ? ARM::t2STMDB_UPD : ARM::STMDB_UPD;
@@ -1548,43 +1518,9 @@ bool ARMFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
     }
 
     if (isTailCall) {
-      // add ip, pc, #6
-      BuildMI(MBB, MI, DL, TII.get(ARM::t2ADR), ARM::R12)
-          .addImm(6)
-          .add(predOps(ARMCC::AL))
-          .setMIFlags(MachineInstr::FrameSetup);
-
-      unsigned PCLabelId = AFI->createPICLabelUId();
-      ARMConstantPoolValue *NewCPV = ARMConstantPoolSymbol::Create(
-          MF.getFunction().getContext(), "__TCPrivateShadowAssert", PCLabelId, 0);
-      MachineConstantPool *MCP = MF.getConstantPool();
-      unsigned CPI = MCP->getConstantPoolIndex(NewCPV, 4);
-
-      // ldr pc, [pc, offset(__TCPrivateShadowAssert)]
-      BuildMI(MBB, MI, DL, TII.get(ARM::t2LDRpci), ARM::PC)
-          .addConstantPoolIndex(CPI)
-          .add(predOps(ARMCC::AL));
-
-      // NOP sled for `add ip, pc, _` (which aligns pc to 4-byte boundaries before calculation)
-      // TODO: Get rid of this unspeakable hack
-      // TODO: Actually, this hack is unreliable because other passes may move this around.
-      BuildMI(MBB, MI, DL, TII.get(ARM::tMOVr), ARM::R8)
-          .addReg(ARM::R8)
-          .add(predOps(ARMCC::AL));
-
-      // (`__TCPrivateShadowAssert` returns to `ip`.)
+      BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT));
     } else {
-      unsigned PCLabelId = AFI->createPICLabelUId();
-      ARMConstantPoolValue *NewCPV = ARMConstantPoolSymbol::Create(
-          MF.getFunction().getContext(), "__TCPrivateShadowAssertReturn", PCLabelId, 0);
-      MachineConstantPool *MCP = MF.getConstantPool();
-      unsigned CPI = MCP->getConstantPoolIndex(NewCPV, 4);
-
-      // ldr pc, [pc, offset(__TCPrivateShadowAssertReturn)]
-      BuildMI(MBB, MI, DL, TII.get(ARM::t2LDRpci), ARM::PC)
-          .addConstantPoolIndex(CPI)
-          .add(predOps(ARMCC::AL));
-
+      BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN));
       // (`__TCPrivateShadowAssertReturn` automatically jumps to `lr` after
       // validation.)
       // TODO: Delete `bx lr`?

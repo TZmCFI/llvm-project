@@ -6248,3 +6248,23 @@ def CompilerBarrier : PseudoInst<(outs), (ins i32imm:$ordering), NoItinerary,
   let AsmString = "@ COMPILER BARRIER";
   let hasNoSchedulingInfo = 1;
 }
+
+//===----------------------------------
+// Shadow stack
+//===----------------------------------
+
+def SHADOW_STACK_PUSH : PseudoInst<(outs), (ins), NoItinerary, []>, Sched<[]> {
+  let AsmString = "# [shadow push (cannot emit asm)]";
+  let isCall = 1;
+}
+
+def SHADOW_STACK_ASSERT : PseudoInst<(outs), (ins), NoItinerary, []>, Sched<[]> {
+  let AsmString = "# [shadow assert (cannot emit asm)]";
+  let isCall = 1;
+}
+
+def SHADOW_STACK_ASSERT_RETURN : PseudoInst<(outs), (ins), NoItinerary, []>, Sched<[]> {
+  let AsmString = "# [shadow assert and return (cannot emit asm)]";
+  let isCall = 1;
+  let isReturn = 1;
+}

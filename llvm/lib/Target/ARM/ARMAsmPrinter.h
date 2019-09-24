@@ -114,6 +114,11 @@ public:
   void LowerPATCHABLE_FUNCTION_EXIT(const MachineInstr &MI);
   void LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI);
 
+  // TZmCFI-specific lowering for ARM.
+  void LowerSHADOW_STACK_PUSH(const MachineInstr &MI);
+  void LowerSHADOW_STACK_ASSERT(const MachineInstr &MI);
+  void LowerSHADOW_STACK_ASSERT_RETURN(const MachineInstr &MI);
+
 private:
   void EmitSled(const MachineInstr &MI, SledKind Kind);
 

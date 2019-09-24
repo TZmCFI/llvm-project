@@ -227,3 +227,79 @@ void ARMAsmPrinter::LowerPATCHABLE_TAIL_CALL(const MachineInstr &MI)
 {
   EmitSled(MI, SledKind::TAIL_CALL);
 }
+
+void ARMAsmPrinter::LowerSHADOW_STACK_PUSH(const MachineInstr &MI) {
+  //   adr ip, =continuation
+  //   ldr pc, =target
+  // target:
+  //   .long __TCPrivateShadowPush
+  // continuation:
+  auto Continuation = OutContext.createTempSymbol();
+  auto Target = OutContext.createTempSymbol();
+
+  EmitToStreamer(*OutStreamer,
+                 MCInstBuilder(ARM::t2ADR)
+                     .addReg(ARM::R12)
+                     .addExpr(MCSymbolRefExpr::create(Continuation, OutContext))
+                     .addImm(ARMCC::AL));
+
+  EmitToStreamer(*OutStreamer,
+                 MCInstBuilder(ARM::t2LDRpci)
+                     .addReg(ARM::PC)
+                     .addExpr(MCSymbolRefExpr::create(Target, OutContext))
+                     .addImm(ARMCC::AL));
+
+  OutStreamer->EmitCodeAlignment(4);
+  OutStreamer->EmitLabel(Target);
+  OutStreamer->EmitSymbolValue(GetExternalSymbolSymbol("__TCPrivateShadowPush"),
+                               4);
+
+  OutStreamer->EmitLabel(Continuation);
+}
+
+void ARMAsmPrinter::LowerSHADOW_STACK_ASSERT(const MachineInstr &MI) {
+  //   adr ip, =continuation
+  //   ldr pc, =target
+  // target:
+  //   .long __TCPrivateShadowAssert
+  // continuation:
+  auto Continuation = OutContext.createTempSymbol();
+  auto Target = OutContext.createTempSymbol();
+
+  EmitToStreamer(*OutStreamer,
+                 MCInstBuilder(ARM::t2ADR)
+                     .addReg(ARM::R12)
+                     .addExpr(MCSymbolRefExpr::create(Continuation, OutContext))
+                     .addImm(ARMCC::AL));
+
+  EmitToStreamer(*OutStreamer,
+                 MCInstBuilder(ARM::t2LDRpci)
+                     .addReg(ARM::PC)
+                     .addExpr(MCSymbolRefExpr::create(Target, OutContext))
+                     .addImm(ARMCC::AL));
+
+  OutStreamer->EmitCodeAlignment(4);
+  OutStreamer->EmitLabel(Target);
+  OutStreamer->EmitSymbolValue(
+      GetExternalSymbolSymbol("__TCPrivateShadowAssert"), 4);
+
+  OutStreamer->EmitLabel(Continuation);
+}
+
+void ARMAsmPrinter::LowerSHADOW_STACK_ASSERT_RETURN(const MachineInstr &MI) {
+  //   ldr pc, =target
+  // target:
+  //   .long __TCPrivateShadowAssertReturn
+  auto Target = OutContext.createTempSymbol();
+
+  EmitToStreamer(*OutStreamer,
+                 MCInstBuilder(ARM::t2LDRpci)
+                     .addReg(ARM::PC)
+                     .addExpr(MCSymbolRefExpr::create(Target, OutContext))
+                     .addImm(ARMCC::AL));
+
+  OutStreamer->EmitCodeAlignment(4);
+  OutStreamer->EmitLabel(Target);
+  OutStreamer->EmitSymbolValue(
+      GetExternalSymbolSymbol("__TCPrivateShadowAssertReturn"), 4);
+}
