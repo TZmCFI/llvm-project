@@ -1477,7 +1477,8 @@ bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
     // TODO: Actually, this hack is unreliable because other passes may move this around.
     BuildMI(MBB, MI, DL, TII.get(ARM::tMOVr), ARM::R8)
         .addReg(ARM::R8)
-        .add(predOps(ARMCC::AL));
+        .add(predOps(ARMCC::AL))
+        .setMIFlags(MachineInstr::FrameSetup);
 
   }
 

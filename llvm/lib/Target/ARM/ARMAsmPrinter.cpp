@@ -1227,6 +1227,8 @@ void ARMAsmPrinter::EmitUnwindingInstruction(const MachineInstr *MI) {
           ATS.emitMovSP(DstReg, -Offset);
         }
       }
+    } else if (Opc == ARM::tMOVr) {
+      // ignore shadow push stuff
     } else if (DstReg == ARM::SP) {
       MI->print(errs());
       llvm_unreachable("Unsupported opcode for unwinding information");
