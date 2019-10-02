@@ -161,6 +161,8 @@ def ARMretflag       : SDNode<"ARMISD::RET_FLAG", SDTNone,
                               [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 def ARMintretflag    : SDNode<"ARMISD::INTRET_FLAG", SDT_ARMcall,
                               [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
+def ARMtcintretflag  : SDNode<"ARMISD::TC_INTR_RET_FLAG", SDTNone,
+                              [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 def ARMcmov          : SDNode<"ARMISD::CMOV", SDT_ARMCMov,
                               [SDNPInGlue]>;
 def ARMsubs          : SDNode<"ARMISD::SUBS", SDTIntBinOp, [SDNPOutGlue]>;
@@ -6267,4 +6269,15 @@ def SHADOW_STACK_ASSERT_RETURN : PseudoInst<(outs), (ins), NoItinerary, []>, Sch
   let AsmString = "# [shadow assert and return (cannot emit asm)]";
   let isCall = 1;
   let isReturn = 1;
+}
+
+//===----------------------------------
+// TZmCFI optimized exception return
+//===----------------------------------
+
+def TC_LEAVE_INTERRUPT : PseudoInst<(outs), (ins), NoItinerary, [(ARMtcintretflag)]>, Sched<[]> {
+  let AsmString = "# [TC optimized exception return (cannot emit asm)]";
+  let isReturn = 1;
+  let isTerminator = 1;
+  let isBarrier = 1;
 }

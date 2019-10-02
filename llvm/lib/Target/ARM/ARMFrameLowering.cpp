@@ -1756,6 +1756,11 @@ void ARMFrameLowering::determineCalleeSaves(MachineFunction &MF,
       SavedRegs.set(ARM::R4);
   }
 
+  // `TC_INTR` directly "returns" to an exception return trampoline. `LR` can be
+  // safely discarded.
+  if (MF.getFunction().getCallingConv() == CallingConv::TC_INTR)
+    SavedRegs.reset(ARM::LR);
+
   // See if we can spill vector registers to aligned stack.
   checkNumAlignedDPRCS2Regs(MF, SavedRegs);
 

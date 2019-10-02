@@ -1852,6 +1852,7 @@ CCAssignFn *ARMFastISel::CCAssignFnForCall(CallingConv::ID CC,
     }
     LLVM_FALLTHROUGH;
   case CallingConv::C:
+  case CallingConv::TC_INTR:
   case CallingConv::CXX_FAST_TLS:
     // Use target triple & subtarget features to do actual dispatch.
     if (Subtarget->isAAPCS_ABI()) {
@@ -2099,6 +2100,9 @@ bool ARMFastISel::SelectRet(const Instruction *I) {
     return false;
 
   if (TLI.supportSplitCSR(FuncInfo.MF))
+    return false;
+
+  if (F.getCallingConv() == CallingConv::TC_INTR)
     return false;
 
   // Build a list of return value registers.

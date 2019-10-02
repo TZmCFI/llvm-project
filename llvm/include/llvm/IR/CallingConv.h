@@ -241,6 +241,12 @@ namespace CallingConv {
     /// The remainder matches the regular calling convention.
     WASM_EmscriptenInvoke = 99,
 
+    /// TZmCFI-optimized exception handler. The C convention would work fine,
+    /// but this provides improved exception handling performance, such as
+    /// faster response (accomplished by not spilling LR) and reduced stack
+    /// usage.
+    TC_INTR = 100,
+
     /// The highest possible calling convention ID. Must be some 2^k - 1.
     MaxID = 1023
   };

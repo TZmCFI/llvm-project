@@ -303,3 +303,21 @@ void ARMAsmPrinter::LowerSHADOW_STACK_ASSERT_RETURN(const MachineInstr &MI) {
   OutStreamer->EmitSymbolValue(
       GetExternalSymbolSymbol("__TCPrivateShadowAssertReturn"), 4);
 }
+
+void ARMAsmPrinter::LowerTC_LEAVE_INTERRUPT(const MachineInstr &MI) {
+  //   ldr pc, =target
+  // target:
+  //   .long __TCPrivateLeaveInterrupt
+  auto Target = OutContext.createTempSymbol();
+
+  EmitToStreamer(*OutStreamer,
+                 MCInstBuilder(ARM::t2LDRpci)
+                     .addReg(ARM::PC)
+                     .addExpr(MCSymbolRefExpr::create(Target, OutContext))
+                     .addImm(ARMCC::AL));
+
+  OutStreamer->EmitCodeAlignment(4);
+  OutStreamer->EmitLabel(Target);
+  OutStreamer->EmitSymbolValue(
+      GetExternalSymbolSymbol("__TCPrivateLeaveInterrupt"), 4);
+}

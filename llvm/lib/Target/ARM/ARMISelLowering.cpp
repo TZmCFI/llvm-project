@@ -1555,6 +1555,7 @@ const char *ARMTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case ARMISD::BR2_JT:        return "ARMISD::BR2_JT";
   case ARMISD::RET_FLAG:      return "ARMISD::RET_FLAG";
   case ARMISD::INTRET_FLAG:   return "ARMISD::INTRET_FLAG";
+  case ARMISD::TC_INTR_RET_FLAG: return "ARMISD::TC_INTR_RET_FLAG";
   case ARMISD::PIC_ADD:       return "ARMISD::PIC_ADD";
   case ARMISD::CMP:           return "ARMISD::CMP";
   case ARMISD::CMN:           return "ARMISD::CMN";
@@ -1897,6 +1898,11 @@ ARMTargetLowering::getEffectiveCallingConv(CallingConv::ID CC,
   case CallingConv::ARM_AAPCS_VFP:
   case CallingConv::Swift:
     return isVarArg ? CallingConv::ARM_AAPCS : CallingConv::ARM_AAPCS_VFP;
+  case CallingConv::TC_INTR:
+    if (isVarArg) {
+      report_fatal_error("TC_INTR does not support vararg");
+    }
+    LLVM_FALLTHROUGH;
   case CallingConv::C:
     if (!Subtarget->isAAPCS_ABI())
       return CallingConv::ARM_APCS;
@@ -2613,6 +2619,11 @@ bool ARMTargetLowering::IsEligibleForTailCallOptimization(
   if (CallerF.hasFnAttribute("interrupt"))
     return false;
 
+  // `TC_INTR` is implemented by tail-calling an exception return trampoline, so
+  // there is no room for another tail call.
+  if (CallerCC == CallingConv::TC_INTR)
+    return false;
+
   // Also avoid sibcall optimization if either caller or callee uses struct
   // return semantics.
   if (isCalleeStructRet || isCallerStructRet)
@@ -2896,6 +2907,10 @@ ARMTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     if (Subtarget->isThumb1Only())
       report_fatal_error("interrupt attribute is not supported in Thumb1");
     return LowerInterruptReturn(RetOps, dl, DAG);
+  }
+
+  if (CallConv == CallingConv::TC_INTR) {
+    return DAG.getNode(ARMISD::TC_INTR_RET_FLAG, dl, MVT::Other, RetOps);
   }
 
   return DAG.getNode(ARMISD::RET_FLAG, dl, MVT::Other, RetOps);

@@ -15,6 +15,7 @@
 #include "ARMCallLowering.h"
 #include "ARMBaseInstrInfo.h"
 #include "ARMISelLowering.h"
+#include "ARMMachineFunctionInfo.h"
 #include "ARMSubtarget.h"
 #include "Utils/ARMBaseInfo.h"
 #include "llvm/ADT/SmallVector.h"
@@ -267,9 +268,19 @@ bool ARMCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
                                   ArrayRef<Register> VRegs) const {
   assert(!Val == VRegs.empty() && "Return value without a vreg");
 
+  auto &MF = MIRBuilder.getMF();
+  const auto &F = MF.getFunction();
+  bool isTCExcReturn = F.getCallingConv() == CallingConv::TC_INTR;
+
   auto const &ST = MIRBuilder.getMF().getSubtarget<ARMSubtarget>();
-  unsigned Opcode = ST.getReturnOpcode();
-  auto Ret = MIRBuilder.buildInstrNoInsert(Opcode).add(predOps(ARMCC::AL));
+  MachineInstrBuilder Ret;
+
+  if (isTCExcReturn) {
+    Ret = MIRBuilder.buildInstrNoInsert(ARM::TC_LEAVE_INTERRUPT);
+  } else {
+    unsigned Opcode = ST.getReturnOpcode();
+    Ret = MIRBuilder.buildInstrNoInsert(Opcode).add(predOps(ARMCC::AL));
+  }
 
   if (!lowerReturnVal(MIRBuilder, Val, VRegs, Ret))
     return false;
