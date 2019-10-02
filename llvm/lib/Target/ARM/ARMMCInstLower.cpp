@@ -305,10 +305,16 @@ void ARMAsmPrinter::LowerSHADOW_STACK_ASSERT_RETURN(const MachineInstr &MI) {
 }
 
 void ARMAsmPrinter::LowerTC_LEAVE_INTERRUPT(const MachineInstr &MI) {
+  //   cpsid f
   //   ldr pc, =target
   // target:
   //   .long __TCPrivateLeaveInterrupt
   auto Target = OutContext.createTempSymbol();
+
+  EmitToStreamer(*OutStreamer, MCInstBuilder(ARM::tCPS)
+                                   .addImm(ARM_PROC::ID)
+                                   .addImm(ARM_PROC::F)
+                                   .addImm(ARMCC::AL));
 
   EmitToStreamer(*OutStreamer,
                  MCInstBuilder(ARM::t2LDRpci)
