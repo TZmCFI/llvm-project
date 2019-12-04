@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=thumbv8m.main %s -o /dev/null
+; RUN: llc -mtriple=thumbv8m.main %s -o - | FileCheck %s
 
 define void @main() shadowcallstack {
         ; instrumentation code is omitted because LR is not
