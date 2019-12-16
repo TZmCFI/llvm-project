@@ -1076,10 +1076,6 @@ void ARMAsmPrinter::EmitUnwindingInstruction(const MachineInstr *MI) {
   unsigned Opc = MI->getOpcode();
   unsigned SrcReg, DstReg;
 
-  if (Opc == ARM::SHADOW_STACK_PUSH) {
-    return;
-  }
-
   if (Opc == ARM::tPUSH || Opc == ARM::tLDRpci) {
     // Two special cases:
     // 1) tPUSH does not have src/dst regs.
@@ -1226,8 +1222,6 @@ void ARMAsmPrinter::EmitUnwindingInstruction(const MachineInstr *MI) {
           ATS.emitMovSP(DstReg, -Offset);
         }
       }
-    } else if (Opc == ARM::tMOVr) {
-      // ignore shadow push stuff
     } else if (DstReg == ARM::SP) {
       MI->print(errs());
       llvm_unreachable("Unsupported opcode for unwinding information");

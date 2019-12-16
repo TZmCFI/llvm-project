@@ -1445,13 +1445,6 @@ bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
   ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
-  if (needsShadowCallStackProlog(MF, CSI)) {
-    DebugLoc DL;
-
-    BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_PUSH))
-        .setMIFlags(MachineInstr::FrameSetup);
-  }
-
   unsigned PushOpc = AFI->isThumbFunction() ? ARM::t2STMDB_UPD : ARM::STMDB_UPD;
   unsigned PushOneOpc = AFI->isThumbFunction() ?
     ARM::t2STR_PRE : ARM::STR_PRE_IMM;
@@ -1469,6 +1462,68 @@ bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
   // and these spills.
   if (NumAlignedDPRCS2Regs)
     emitAlignedDPRCS2Spills(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
+
+  if (needsShadowCallStackProlog(MF, CSI)) {
+    const MachineRegisterInfo &MRI = MF.getRegInfo();
+    DebugLoc DL;
+
+    SmallVector<unsigned, 2> Regs;
+    bool ShouldSave[2] = {true, true};
+
+    for (const CalleeSavedInfo &CS : CSI) {
+      unsigned Reg = CS.getReg();
+      switch (Reg) {
+      case ARM::R4:
+        ShouldSave[0] = false;
+        break;
+      case ARM::R5:
+        ShouldSave[1] = false;
+        break;
+      default:;
+      }
+    }
+
+    if (ShouldSave[0] || MRI.isLiveIn(ARM::R4))
+      Regs.push_back(ARM::R4);
+    if (ShouldSave[1] || MRI.isLiveIn(ARM::R5))
+      Regs.push_back(ARM::R5);
+
+    // Save `{r4, r5}` if necessary
+    // TODO: merge with the previous `push` instruction
+    if (Regs.size() > 1) {
+      MachineInstrBuilder MIB =
+          BuildMI(MBB, MI, DL, TII.get(ARM::t2STMDB_UPD), ARM::SP)
+              .addReg(ARM::SP)
+              .add(predOps(ARMCC::AL));
+      for (auto &Reg : Regs)
+        MIB.addReg(Reg);
+    } else if (Regs.size() == 1) {
+      BuildMI(MBB, MI, DL, TII.get(ARM::t2STR_PRE), ARM::SP)
+          .addReg(Regs[0])
+          .addReg(ARM::SP)
+          .addImm(-4)
+          .add(predOps(ARMCC::AL));
+    }
+
+    // Call `__TCPrivateShadowPush`
+    BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_PUSH));
+
+    // Reload `{r4, r5}`
+    if (Regs.size() > 1) {
+      MachineInstrBuilder MIB =
+          BuildMI(MBB, MI, DL, TII.get(ARM::t2LDMIA_UPD), ARM::SP)
+              .addReg(ARM::SP)
+              .add(predOps(ARMCC::AL));
+      for (auto &Reg : Regs)
+        MIB.addReg(Reg, 0);
+    } else if (Regs.size() == 1) {
+      BuildMI(MBB, MI, DL, TII.get(ARM::t2LDR_POST), Regs[0])
+          .addReg(ARM::SP, RegState::Define)
+          .addReg(ARM::SP)
+          .addImm(4)
+          .add(predOps(ARMCC::AL));
+    }
+  }
 
   return true;
 }
