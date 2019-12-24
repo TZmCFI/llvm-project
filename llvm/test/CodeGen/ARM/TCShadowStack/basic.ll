@@ -19,7 +19,7 @@ define void @main() shadowcallstack {
 ; CHECK-NEXT:     ldr.w   pc, .Ltmp2
 ; CHECK-NEXT:     .p2align        2
 ; CHECK-LABEL:  .Ltmp2:
-; CHECK-NEXT:     .long   __TCPrivateShadowAssertReturn
+; CHECK-NEXT:     .long   __TCPrivateShadowAssertReturnFast
         call void @ext_func()
         ret void
 }

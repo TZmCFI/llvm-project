@@ -118,6 +118,7 @@ public:
   void LowerSHADOW_STACK_PUSH(const MachineInstr &MI);
   void LowerSHADOW_STACK_ASSERT(const MachineInstr &MI);
   void LowerSHADOW_STACK_ASSERT_RETURN(const MachineInstr &MI);
+  void LowerSHADOW_STACK_ASSERT_RETURN_FAST(const MachineInstr &MI);
   void LowerTC_LEAVE_INTERRUPT(const MachineInstr &MI);
 
 private:

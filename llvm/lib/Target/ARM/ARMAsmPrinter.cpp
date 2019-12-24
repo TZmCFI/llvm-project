@@ -2144,6 +2144,9 @@ void ARMAsmPrinter::EmitInstruction(const MachineInstr *MI) {
   case ARM::SHADOW_STACK_ASSERT_RETURN:
     LowerSHADOW_STACK_ASSERT_RETURN(*MI);
     return;
+  case ARM::SHADOW_STACK_ASSERT_RETURN_FAST:
+    LowerSHADOW_STACK_ASSERT_RETURN_FAST(*MI);
+    return;
   case ARM::TC_LEAVE_INTERRUPT:
     LowerTC_LEAVE_INTERRUPT(*MI);
     return;

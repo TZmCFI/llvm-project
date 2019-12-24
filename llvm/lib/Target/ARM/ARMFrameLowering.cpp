@@ -162,7 +162,8 @@ static bool isCSRestore(MachineInstr &MI, const ARMBaseInstrInfo &TII,
 
   // Move past shadow return code.
   if (MI.getOpcode() == ARM::SHADOW_STACK_ASSERT ||
-      MI.getOpcode() == ARM::SHADOW_STACK_ASSERT_RETURN)
+      MI.getOpcode() == ARM::SHADOW_STACK_ASSERT_RETURN ||
+      MI.getOpcode() == ARM::SHADOW_STACK_ASSERT_RETURN_FAST)
     return true;
 
   return false;
@@ -1575,7 +1576,11 @@ bool ARMFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
     if (isTailCall) {
       BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT));
     } else {
-      BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN));
+      if (MI->readsRegister(ARM::R2) || MI->readsRegister(ARM::R3)) {
+        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN));
+      } else {
+        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN_FAST));
+      }
       // (`__TCPrivateShadowAssertReturn` automatically jumps to `lr` after
       // validation.)
       // TODO: Delete `bx lr`?
