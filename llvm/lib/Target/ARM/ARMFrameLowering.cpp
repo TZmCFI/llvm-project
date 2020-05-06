@@ -1507,7 +1507,11 @@ bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
     }
 
     // Call `__TCPrivateShadowPush`
-    BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_PUSH));
+    BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_PUSH))
+        .addReg(ARM::R12, RegState::Define)
+        .addReg(ARM::R4, RegState::Define)
+        .addReg(ARM::R5, RegState::Define)
+        .addReg(ARM::LR);
 
     // Reload `{r4, r5}`
     if (Regs.size() > 1) {
@@ -1574,12 +1578,15 @@ bool ARMFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
     }
 
     if (isTailCall) {
-      BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT));
+      BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT))
+          .addReg(ARM::LR);
     } else {
       if (MI->readsRegister(ARM::R2) || MI->readsRegister(ARM::R3)) {
-        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN));
+        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN))
+            .addReg(ARM::LR);
       } else {
-        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN_FAST));
+        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN_FAST))
+            .addReg(ARM::LR);
       }
       // (`__TCPrivateShadowAssertReturn` automatically jumps to `lr` after
       // validation.)
