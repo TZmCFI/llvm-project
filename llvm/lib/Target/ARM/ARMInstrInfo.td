@@ -6271,7 +6271,7 @@ def SHADOW_STACK_ASSERT_RETURN : PseudoInst<(outs), (ins GPRlr:$ra), NoItinerary
   let isReturn = 1;
 }
 
-def SHADOW_STACK_ASSERT_RETURN_FAST : PseudoInst<(outs), (ins), NoItinerary, []>, Sched<[]> {
+def SHADOW_STACK_ASSERT_RETURN_FAST : PseudoInst<(outs), (ins GPRlr:$ra), NoItinerary, []>, Sched<[]> {
   let AsmString = "# [shadow fast assert and return (cannot emit asm)]";
   let hasSideEffects = 1;
   let isReturn = 1;
