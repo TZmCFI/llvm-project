@@ -1507,11 +1507,7 @@ bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
     }
 
     // Call `__TCPrivateShadowPush`
-    BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_PUSH))
-        .addReg(ARM::R12, RegState::Define)
-        .addReg(ARM::R4, RegState::Define)
-        .addReg(ARM::R5, RegState::Define)
-        .addReg(ARM::LR);
+    BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_PUSH));
 
     // Reload `{r4, r5}`
     if (Regs.size() > 1) {
@@ -1563,30 +1559,30 @@ bool ARMFrameLowering::restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
 
   if (needsShadowCallStackProlog(MF, CSI)) {
     DebugLoc DL;
-    bool isTailCall = false;
+    bool isTailCall = true;
+    bool mayReturnR2R3 = true;
     if (MBB.end() != MI) {
       DL = MI->getDebugLoc();
       unsigned RetOpcode = MI->getOpcode();
       isTailCall = RetOpcode == ARM::TCRETURNdi ||
                    RetOpcode == ARM::TCRETURNri || RetOpcode == ARM::tBcc ||
-                   RetOpcode == ARM::t2Bcc;
+                   RetOpcode == ARM::t2Bcc || RetOpcode == ARM::t2B;
       // TODO: handle `ARM::t2SUBS_PC_LR`
       if (!isTailCall) {
         assert((RetOpcode == ARM::BX_RET || RetOpcode == ARM::tBX_RET) &&
                "expecting BX LR");
       }
+
+      mayReturnR2R3 = MI->readsRegister(ARM::R2) || MI->readsRegister(ARM::R3);
     }
 
     if (isTailCall) {
-      BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT))
-          .addReg(ARM::LR);
+      BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT));
     } else {
-      if (MI->readsRegister(ARM::R2) || MI->readsRegister(ARM::R3)) {
-        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN))
-            .addReg(ARM::LR);
+      if (mayReturnR2R3) {
+        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN));
       } else {
-        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN_FAST))
-            .addReg(ARM::LR);
+        BuildMI(MBB, MI, DL, TII.get(ARM::SHADOW_STACK_ASSERT_RETURN_FAST));
       }
       // (`__TCPrivateShadowAssertReturn` automatically jumps to `lr` after
       // validation.)

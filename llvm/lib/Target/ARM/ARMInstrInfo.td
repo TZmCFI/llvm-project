@@ -6255,26 +6255,33 @@ def CompilerBarrier : PseudoInst<(outs), (ins i32imm:$ordering), NoItinerary,
 // Shadow stack
 //===----------------------------------
 
-def SHADOW_STACK_PUSH : PseudoInst<(outs GPR:$ip, GPR:$r4, GPR:$r5), (ins GPRlr:$ra), NoItinerary, []>, Sched<[]> {
+let Defs = [CPSR], hasSideEffects = 1 in {
+def SHADOW_STACK_PUSH : PseudoInst<(outs), (ins), NoItinerary, []>, Sched<[]> {
   let AsmString = "# [shadow push (cannot emit asm)]";
-  let hasSideEffects = 1;
+  let Size = 14;
+  let Defs = [CPSR, R4, R5, R12];
+  let Uses = [LR];
 }
 
-def SHADOW_STACK_ASSERT : PseudoInst<(outs), (ins GPRlr:$ra), NoItinerary, []>, Sched<[]> {
+def SHADOW_STACK_ASSERT : PseudoInst<(outs), (ins), NoItinerary, []>, Sched<[]> {
   let AsmString = "# [shadow assert (cannot emit asm)]";
-  let hasSideEffects = 1;
+  let Size = 14;
+  let Uses = [LR];
 }
 
-def SHADOW_STACK_ASSERT_RETURN : PseudoInst<(outs), (ins GPRlr:$ra), NoItinerary, []>, Sched<[]> {
+def SHADOW_STACK_ASSERT_RETURN : PseudoInst<(outs), (ins), NoItinerary, []>, Sched<[]> {
   let AsmString = "# [shadow assert and return (cannot emit asm)]";
-  let hasSideEffects = 1;
   let isReturn = 1;
+  let Size = 10;
+  let Uses = [LR];
 }
 
-def SHADOW_STACK_ASSERT_RETURN_FAST : PseudoInst<(outs), (ins GPRlr:$ra), NoItinerary, []>, Sched<[]> {
+def SHADOW_STACK_ASSERT_RETURN_FAST : PseudoInst<(outs), (ins), NoItinerary, []>, Sched<[]> {
   let AsmString = "# [shadow fast assert and return (cannot emit asm)]";
-  let hasSideEffects = 1;
   let isReturn = 1;
+  let Size = 10;
+  let Uses = [LR];
+}
 }
 
 //===----------------------------------
@@ -6286,4 +6293,5 @@ def TC_LEAVE_INTERRUPT : PseudoInst<(outs), (ins), NoItinerary, [(ARMtcintretfla
   let isReturn = 1;
   let isTerminator = 1;
   let isBarrier = 1;
+  let Size = 10;
 }
